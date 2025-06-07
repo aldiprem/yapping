@@ -3,52 +3,62 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Yapping Generator</title>
+  <title>🎁 Yapping Generator AI</title>
   <style>
-    body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 2rem; background-color: #fefefe; }
-    input, textarea, button { width: 100%; margin-top: 10px; padding: 10px; font-size: 1rem; }
-    button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
-    button:hover { background-color: #45a049; }
-    #output { white-space: pre-wrap; background: #f0f0f0; padding: 1rem; margin-top: 1rem; border-radius: 6px; }
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    input, button { padding: 10px; margin: 10px 0; width: 100%; }
+    button { background-color: #28a745; color: white; border: none; font-size: 16px; }
+    #result { margin-top: 20px; background: #f1f1f1; padding: 15px; border-radius: 5px; }
   </style>
 </head>
 <body>
-  <h2>🎁 Yapping Generator AI</h2>
-  <label for="gift">Nama Gift:</label>
-  <input type="text" id="gift" placeholder="Contoh: Bunga Mawar"/>
+  <h2>🎁 <b>Yapping Generator AI</b></h2>
 
-  <label for="model">Model:</label>
-  <input type="text" id="model" placeholder="Contoh: Cewek Cantik"/>
+  <label>Nama Gift:</label>
+  <input type="text" id="gift" placeholder="Contoh: jelly bunny">
 
-  <label for="background">Latar:</label>
-  <input type="text" id="background" placeholder="Contoh: Pantai Senja"/>
+  <label>Model:</label>
+  <input type="text" id="model" placeholder="Contoh: jellfish">
+
+  <label>Latar:</label>
+  <input type="text" id="background" placeholder="Contoh: hitam">
 
   <button onclick="generateYapping()">✨ Buat Yapping</button>
 
-  <div id="output"></div>
+  <div id="result">⌛ Lagi mikir nih...</div>
 
   <script>
     async function generateYapping() {
       const gift = document.getElementById("gift").value.trim();
       const model = document.getElementById("model").value.trim();
       const background = document.getElementById("background").value.trim();
-      const outputDiv = document.getElementById("output");
 
       if (!gift || !model || !background) {
-        outputDiv.textContent = "❗ Mohon isi semua kolom terlebih dahulu.";
+        document.getElementById("result").innerText = "❗ Semua kolom harus diisi.";
         return;
       }
 
-      outputDiv.textContent = "⏳ Lagi mikir nih...";
+      document.getElementById("result").innerText = "⏳ Lagi mikir nih...";
 
-      const response = await fetch("https://134.209.219.210.com/yap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gift_name: gift, model: model, background: background })
-      });
+      try {
+        const response = await fetch("http://134.209.219.210:5000/yap", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ gift_name: gift, model: model, background: background })
+        });
 
-      const data = await response.json();
-      outputDiv.textContent = data.yapping || "❌ Gagal membuat yapping.";
+        const data = await response.json();
+
+        if (data.yapping) {
+          document.getElementById("result").innerText = data.yapping;
+        } else {
+          document.getElementById("result").innerText = "❌ Gagal mendapatkan yapping.";
+        }
+      } catch (err) {
+        document.getElementById("result").innerText = "⚠️ Error: " + err.message;
+      }
     }
   </script>
 </body>
