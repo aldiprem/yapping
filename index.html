@@ -1,125 +1,94 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-<title>Deteksi Tangan Akurat</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deteksi Jempol Stabil</title>
 <style>
-html,body {
-  height:100%;
-  margin:0;
-  background:#0b1020;
-  color:#fff;
-  font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-  overflow:hidden;
-}
-#video {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100vh;
-  object-fit: cover;
-  transform: scaleX(-1); /* mirror kamera depan */
-  z-index: 0;
-}
-canvas {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100vh;
-  z-index: 1;
-}
+  body { margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#000; }
+  canvas, video { position:absolute; }
 </style>
 </head>
 <body>
-<video id="video" autoplay playsinline muted></video>
-<canvas id="c"></canvas>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+<video id="video" autoplay playsinline style="transform: scaleX(-1);"></video>
+<canvas id="output"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
 <script>
-(async () => {
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d');
+const video = document.getElementById('video');
+const canvas = document.getElementById('output');
+const ctx = canvas.getContext('2d');
 
-  // Atur ukuran canvas agar sama dengan layar
-  function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+let smoothX = null, smoothY = null; // untuk smoothing titik
 
-  // Akses kamera
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-    video.srcObject = stream;
-    await new Promise(r => video.onloadeddata = r);
-  } catch (err) {
-    console.error("Kamera gagal:", err);
-    return;
-  }
+const hands = new Hands({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
 
-  // Load MediaPipe Hands
-  const model = handPoseDetection.SupportedModels.MediaPipeHands;
-  const detector = await handPoseDetection.createDetector(model, {
-    runtime: 'mediapipe',
-    modelType: 'full',
-    maxHands: 2,
-    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands'
-  });
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
 
-  // Daftar koneksi antar titik
-  const connections = [
-    [0,1],[1,2],[2,3],[3,4],
-    [0,5],[5,6],[6,7],[7,8],
-    [0,9],[9,10],[10,11],[11,12],
-    [0,13],[13,14],[14,15],[15,16],
-    [0,17],[17,18],[18,19],[19,20]
-  ];
+hands.onResults(onResults);
 
-  async function detectHands() {
-    const hands = await detector.estimateHands(video, { flipHorizontal: true });
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+async function startCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  video.srcObject = stream;
 
-    hands.forEach(hand => {
-      const vW = video.videoWidth;
-      const vH = video.videoHeight;
-
-      // Gambar garis
-      ctx.strokeStyle = 'lime';
-      ctx.lineWidth = 2;
-      connections.forEach(([a, b]) => {
-        const pa = hand.keypoints[a];
-        const pb = hand.keypoints[b];
-        ctx.beginPath();
-        ctx.moveTo(pa.x / vW * canvas.width, pa.y / vH * canvas.height);
-        ctx.lineTo(pb.x / vW * canvas.width, pb.y / vH * canvas.height);
-        ctx.stroke();
-      });
-
-      // Gambar titik
-      hand.keypoints.forEach(p => {
-        const px = p.x / vW * canvas.width;
-        const py = p.y / vH * canvas.height;
-        ctx.beginPath();
-        ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fillStyle = 'red';
-        ctx.fill();
-        ctx.strokeStyle = 'white';
-        ctx.stroke();
-      });
+  video.onloadedmetadata = () => {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const camera = new Camera(video, {
+      onFrame: async () => { await hands.send({ image: video }); },
+      width: video.videoWidth,
+      height: video.videoHeight
     });
+    camera.start();
+  };
+}
 
-    requestAnimationFrame(detectHands);
+function onResults(results) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // gambar video di canvas (mirror)
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.drawImage(results.image, -canvas.width, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const landmarks = results.multiHandLandmarks[0];
+
+    // jempol ujung: index 4 di Mediapipe
+    const thumbTip = landmarks[4];
+    const x = thumbTip.x * canvas.width;
+    const y = thumbTip.y * canvas.height;
+
+    // smoothing (0.3 = lebih lembut, ganti ke 0.5 untuk responsif tapi agak goyang)
+    if (smoothX === null) {
+      smoothX = x;
+      smoothY = y;
+    } else {
+      smoothX = smoothX + (x - smoothX) * 0.3;
+      smoothY = smoothY + (y - smoothY) * 0.3;
+    }
+
+    // gambar titik di posisi jempol
+    ctx.beginPath();
+    ctx.arc(smoothX, smoothY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "red";
+    ctx.fill();
   }
+}
 
-  detectHands();
-})();
+startCamera();
 </script>
 </body>
 </html>
