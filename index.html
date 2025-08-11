@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-  <title>Deteksi Tangan Akurat + Kamera Mirror</title>
+  <title>Deteksi Tangan dengan Garis ke Titik Tengah Pergelangan</title>
   <style>
     html,body {
       height:100%;
@@ -74,14 +74,8 @@
     window.addEventListener('resize', resize);
     resize();
 
-    const HAND_CONNECTIONS = [
-      [0,1],[1,2],[2,3],[3,4],       // ibu jari
-      [0,5],[5,6],[6,7],[7,8],       // telunjuk
-      [5,9],[9,10],[10,11],[11,12],  // jari tengah
-      [9,13],[13,14],[14,15],[15,16],// jari manis
-      [13,17],[17,18],[18,19],[19,20],// kelingking
-      [0,17]                         // pergelangan ke kelingking
-    ];
+    // Landmark ujung jari (ibu jari, telunjuk, tengah, manis, kelingking)
+    const fingerTips = [4, 8, 12, 16, 20];
 
     async function detectAndDraw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -96,22 +90,19 @@
 
         const keypoints = hands[0].keypoints;
 
-        // Gambar garis koneksi tangan
+        // Titik tengah pergelangan tangan (landmark 0)
+        const centerX = canvas.width - (keypoints[0].x * scaleX);
+        const centerY = keypoints[0].y * scaleY;
+
         ctx.strokeStyle = 'lime';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
+
         ctx.beginPath();
-        for (const [start, end] of HAND_CONNECTIONS) {
-          const kpStart = keypoints[start];
-          const kpEnd = keypoints[end];
-
-          // Karena video sudah mirror, kita balik x di canvas supaya sinkron
-          const x1 = canvas.width - (kpStart.x * scaleX);
-          const y1 = kpStart.y * scaleY;
-          const x2 = canvas.width - (kpEnd.x * scaleX);
-          const y2 = kpEnd.y * scaleY;
-
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
+        for (const tip of fingerTips) {
+          const tipX = canvas.width - (keypoints[tip].x * scaleX);
+          const tipY = keypoints[tip].y * scaleY;
+          ctx.moveTo(centerX, centerY);
+          ctx.lineTo(tipX, tipY);
         }
         ctx.stroke();
 
