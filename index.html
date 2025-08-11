@@ -1,65 +1,398 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>🎁 Yapping Generator AI</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>Naga Tengkorak Sentuh + Kamera</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    input, button { padding: 10px; margin: 10px 0; width: 100%; }
-    button { background-color: #28a745; color: white; border: none; font-size: 16px; }
-    #result { margin-top: 20px; background: #f1f1f1; padding: 15px; border-radius: 5px; }
+    html,body {
+      height:100%;
+      margin:0;
+      background:#0b1020;
+      color:#fff;
+      font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+    #video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 0;
+      background: #000;
+      transform: scaleX(-1);
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display:block;
+      width:100%;
+      height:100vh;
+      touch-action:none;
+      z-index: 1;
+    }
+    .ui {
+      position:fixed;
+      right:12px;
+      top:12px;
+      background:rgba(255,255,255,0.06);
+      padding:8px 10px;
+      border-radius:8px;
+      font-size:13px;
+      backdrop-filter: blur(6px);
+      z-index: 2;
+    }
+    .ui input[type=range] { width:120px; }
+    .hint {
+      position:fixed;
+      left:12px;
+      bottom:12px;
+      background:rgba(0,0,0,0.35);
+      padding:8px 10px;
+      border-radius:8px;
+      font-size:13px;
+      z-index: 2;
+    }
   </style>
 </head>
 <body>
-  <h2>🎁 <b>Yapping Generator AI</b></h2>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="c"></canvas>
 
-  <label>Nama Gift:</label>
-  <input type="text" id="gift" placeholder="Contoh: jelly bunny">
+  <div class="ui">
+    <div>Panjang: <span id="lenLabel">60</span></div>
+    <input id="len" type="range" min="5" max="200" value="60">
+    <div>Kecepatan: <span id="spdLabel">8</span></div>
+    <input id="spd" type="range" min="1" max="30" value="8">
+  </div>
 
-  <label>Model:</label>
-  <input type="text" id="model" placeholder="Contoh: jellfish">
+  <div class="hint">Sentuh/klik layar untuk menggerakkan naga tengkorak</div>
 
-  <label>Latar:</label>
-  <input type="text" id="background" placeholder="Contoh: hitam">
-
-  <button onclick="generateYapping()">✨ Buat Yapping</button>
-
-  <div id="result">⌛ Lagi mikir nih...</div>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
 
   <script>
-    async function generateYapping() {
-      const gift = document.getElementById("gift").value.trim();
-      const model = document.getElementById("model").value.trim();
-      const background = document.getElementById("background").value.trim();
+  (async () => {
+    const video = document.getElementById('video');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+      await new Promise(r => video.onloadeddata = r);
+    } catch (err) {
+      console.error("Gagal mengakses kamera:", err);
+      return;
+    }
 
-      if (!gift || !model || !background) {
-        document.getElementById("result").innerText = "❗ Semua kolom harus diisi.";
-        return;
-      }
+    const handposeDetection = window.handPoseDetection || window.handposeDetection;
+    const model = handposeDetection.SupportedModels.MediaPipeHands;
+    const detectorConfig = {
+      runtime: 'mediapipe',
+      modelType: 'full',
+      solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands'
+    };
+    const detector = await handposeDetection.createDetector(model, detectorConfig);
 
-      document.getElementById("result").innerText = "⏳ Lagi mikir nih...";
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d', { alpha: true });
 
-      try {
-        const response = await fetch("http://134.209.219.210:5000/yap", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ gift_name: gift, model: model, background: background })
-        });
+    let DPR = window.devicePixelRatio || 1;
+    function resize() {
+      DPR = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * DPR);
+      canvas.height = Math.floor(window.innerHeight * DPR);
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener('resize', resize, { passive: true });
+    resize();
 
-        const data = await response.json();
+    const lenInput = document.getElementById('len');
+    const spdInput = document.getElementById('spd');
+    const lenLabel = document.getElementById('lenLabel');
+    const spdLabel = document.getElementById('spdLabel');
 
-        if (data.yapping) {
-          document.getElementById("result").innerText = data.yapping;
-        } else {
-          document.getElementById("result").innerText = "❌ Gagal mendapatkan yapping.";
-        }
-      } catch (err) {
-        document.getElementById("result").innerText = "⚠️ Error: " + err.message;
+    let segmentCount = parseInt(lenInput.value,10);
+    let speed = parseFloat(spdInput.value);
+
+    lenInput.addEventListener('input', () => {
+      segmentCount = parseInt(lenInput.value,10);
+      lenLabel.textContent = segmentCount;
+      resetSnake();
+    });
+    spdInput.addEventListener('input', () => {
+      speed = parseFloat(spdInput.value);
+      spdLabel.textContent = speed;
+    });
+
+    const pointer = { x: window.innerWidth/2, y: window.innerHeight/2, active: false };
+
+    let segments = [];
+    function resetSnake(){
+      segments = [];
+      const startX = window.innerWidth/2;
+      const startY = window.innerHeight/2;
+      for(let i=0; i<segmentCount; i++){
+        segments.push({ x: startX - i*10, y: startY });
       }
     }
+    resetSnake();
+
+    function setPointerFromEvent(e){
+      e.preventDefault && e.preventDefault();
+      let clientX, clientY;
+      if(e.touches && e.touches.length){
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else if(e.changedTouches && e.changedTouches.length){
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      pointer.x = clientX;
+      pointer.y = clientY;
+      pointer.active = true;
+    }
+
+    canvas.addEventListener('mousedown', setPointerFromEvent, { passive: false });
+    canvas.addEventListener('mousemove', (e) => { if(e.buttons) setPointerFromEvent(e); }, { passive: false });
+    window.addEventListener('mouseup', ()=>{ pointer.active = false; }, { passive: true });
+
+    canvas.addEventListener('touchstart', setPointerFromEvent, { passive: false });
+    canvas.addEventListener('touchmove', setPointerFromEvent, { passive: false });
+    canvas.addEventListener('touchend', ()=>{ pointer.active = false; }, { passive: true });
+    canvas.addEventListener('touchcancel', ()=>{ pointer.active = false; }, { passive: true });
+
+    function lerp(a,b,t){ return a + (b - a) * t; }
+
+    let lastTime = performance.now();
+    let footPhase = 0;
+
+    async function detectHand() {
+      const hands = await detector.estimateHands(video);
+      if (hands.length > 0) {
+        const keypoint = hands[0].keypoints.find(k => k.name === "index_finger_tip") || hands[0].keypoints[8];
+        const x = keypoint.x;
+        const y = keypoint.y;
+    
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
+        const scaleX = window.innerWidth / videoWidth;
+        const scaleY = window.innerHeight / videoHeight;
+    
+        // Flip X supaya konsisten dengan video mirror
+        pointer.x = window.innerWidth - (x * scaleX);
+        pointer.y = y * scaleY;
+        pointer.active = true;
+      } else {
+        pointer.active = false;
+      }
+      requestAnimationFrame(detectHand);
+    }
+
+    detectHand();
+
+    // Fungsi gambar kaki naga tengkorak: lebih tajam, berduri, warna abu-abu gelap
+    function drawLeg(ctx, baseX, baseY, angle, length, width, phase) {
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.rotate(angle);
+
+      // Gerakan kaki nekuk seperti cakar naga
+      const bendAngle = Math.sin(phase) * 0.3; // ±45°
+      
+      ctx.lineWidth = width;
+      ctx.strokeStyle = 'hsl(0, 0%, 35%)'; // abu-abu gelap
+      ctx.fillStyle = 'hsl(0, 0%, 20%)';
+
+      // Tulang kaki utama
+      ctx.beginPath();
+      ctx.moveTo(1, 0);
+      ctx.lineTo(length * 0.7, 0);
+      ctx.stroke();
+
+      // Cakar nekuk tajam
+      ctx.beginPath();
+      ctx.moveTo(length * 0.65, 0);
+      ctx.lineTo(length * 0.65 + length * 0.5 * Math.cos(bendAngle), length * 0.4 * Math.sin(bendAngle));
+      ctx.stroke();
+
+      // Cakar ujung kecil runcing
+      ctx.beginPath();
+      ctx.moveTo(length * 0.65 + length * 0.5 * Math.cos(bendAngle), length * 0.4 * Math.sin(bendAngle));
+      ctx.lineTo(length * 0.65 + length * 0.5 * Math.cos(bendAngle) + width*0.8, length * 0.4 * Math.sin(bendAngle) + width*0.8);
+      ctx.stroke();
+
+      // Duri kecil di kaki (garis pendek tegak)
+      for(let i=0; i<3; i++){
+        const xoff = length * 0.15 * i + 4;
+        ctx.beginPath();
+        ctx.moveTo(xoff, -width * 0.6);
+        ctx.lineTo(xoff, -width * 1.8);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    // Fungsi gambar kepala tengkorak naga
+    function drawDragonSkullHead(ctx, x, y, angle) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+
+      const headLen = 500;
+      const headHeight = 300;
+
+      // Kepala tengkorak - bentuk dasar
+      ctx.fillStyle = '#ddd';
+      ctx.strokeStyle = '#999';
+      ctx.lineWidth = 3;
+
+      ctx.restore();
+    }
+
+    // Fungsi gambar badan naga tengkorak (lebih gelap, berduri)
+    function drawDragonBody(ctx, segments) {
+      for (let i = segments.length - 1; i >= 0; i--) {
+        const p = segments[i];
+        const t = i / Math.max(1, segments.length - 1);
+        const baseSize = lerp(18, 8, t);
+
+        // Warna badan abu-abu gelap ke hitam dengan highlight abu-abu terang
+        const baseHue = 0;
+        const baseSaturation = 0;
+        const baseLightness = lerp(15, 40, t);
+        const highlightLightness = lerp(40, 70, Math.abs(Math.sin(i * 0.7)));
+
+        // Gradient radial 3D gelap
+        const grad = ctx.createRadialGradient(p.x, p.y - baseSize*0.2, baseSize*0.2, p.x, p.y, baseSize);
+        grad.addColorStop(0, `hsl(${baseHue}, ${baseSaturation}%, ${highlightLightness}%)`);
+        grad.addColorStop(0.8, `hsl(${baseHue}, ${baseSaturation}%, ${baseLightness}%)`);
+        grad.addColorStop(1, `hsl(${baseHue}, ${baseSaturation}%, 8%)`);
+
+        ctx.beginPath();
+        ctx.fillStyle = grad;
+        ctx.arc(p.x, p.y, baseSize, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Duri kecil di badan
+        ctx.strokeStyle = `rgba(150,150,150,0.25)`;
+        ctx.lineWidth = 1.2;
+        for(let a=0; a<Math.PI*2; a+=Math.PI/7){
+          ctx.beginPath();
+          const dx = Math.cos(a) * baseSize * 0.8;
+          const dy = Math.sin(a) * baseSize * 0.8;
+          ctx.moveTo(p.x + dx, p.y + dy);
+          ctx.lineTo(p.x + dx * 1.3, p.y + dy * 1.3);
+          ctx.stroke();
+        }
+
+        // Bayangan bawah agar efek mengambang
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(0,0,0,0.25)`;
+        ctx.ellipse(p.x + baseSize * 0.2, p.y + baseSize * 0.3, baseSize * 0.9, baseSize * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function frame(now) {
+      const dt = Math.min(40, now - lastTime) / 16.6667;
+      lastTime = now;
+      footPhase += dt * 0.3;
+
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+      if (pointer.active) {
+        const head = segments[0];
+        const dx = pointer.x - head.x;
+        const dy = pointer.y - head.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const maxStep = speed * dt;
+        const step = Math.min(maxStep, dist);
+        head.x += dx / dist * step;
+        head.y += dy / dist * step;
+      } else {
+        const head = segments[0];
+        head.x = lerp(head.x, window.innerWidth / 2, 0.01 * dt);
+        head.y = lerp(head.y, window.innerHeight / 2, 0.01 * dt);
+      }
+
+      const followDist = 10;
+      for (let i = 1; i < segmentCount; i++) {
+        const prev = segments[i - 1];
+        const cur = segments[i];
+        const dx = prev.x - cur.x;
+        const dy = prev.y - cur.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const targetX = prev.x - (dx / d) * followDist;
+        const targetY = prev.y - (dy / d) * followDist;
+        cur.x = lerp(cur.x, targetX, 0.4 * dt);
+        cur.y = lerp(cur.y, targetY, 0.4 * dt);
+      }
+
+      // Gambar kaki naga tengkorak - di segmen tengah 30%-75%, kaki cakar tajam
+      ctx.lineCap = 'round';
+      for (let i = 0; i < segments.length; i++) {
+        const t = i / segments.length;
+        if (t < 0.3 || t > 0.75) continue;
+
+        const p = segments[i];
+        const size = lerp(20, 12, t);
+
+        let dx, dy;
+        if (i === 0) {
+          const next = segments[i + 1];
+          dx = p.x - next.x;
+          dy = p.y - next.y;
+        } else {
+          const prev = segments[i - 1];
+          dx = prev.x - p.x;
+          dy = prev.y - p.y;
+        }
+        const angle = Math.atan2(dy, dx);
+
+        const legMoveAmplitude = 1.5;
+        const legMoveSpeed = speed * 0.8;
+        const legPhase = footPhase * legMoveSpeed + i * 1.7;
+
+        // Gambar kaki kiri & kanan dengan duri & cakar tajam
+        drawLeg(ctx, p.x, p.y, angle + Math.PI / 2, size * 3, size * 0.35, legPhase);
+        drawLeg(ctx, p.x, p.y, angle - Math.PI / 2, size * 3, size * 0.35, legPhase + Math.PI);
+      }
+
+      // Gambar badan naga tengkorak
+      drawDragonBody(ctx, segments);
+
+      // Gambar kepala tengkorak naga
+      const head = segments[0];
+      const next = segments[1];
+      const angle = Math.atan2(head.y - next.y, head.x - next.x);
+      drawDragonSkullHead(ctx, head.x, head.y, angle);
+
+      // Gambar lingkaran di pointer
+      if (pointer.active) {
+        const pulse = 5 * Math.sin(now / 200) + 20;
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = 2;
+        ctx.arc(pointer.x, pointer.y, pulse, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
   </script>
 </body>
 </html>
