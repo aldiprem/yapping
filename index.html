@@ -114,12 +114,12 @@
         }
         ctx.stroke();
 
-        // Gambar titik landmark
+        // Gambar titik landmark dengan radius kecil (3)
         for (const kp of keypoints) {
           const x = canvas.width - (kp.x * scaleX);
           const y = kp.y * scaleY;
           ctx.beginPath();
-          ctx.arc(x, y, 6, 0, Math.PI * 2);
+          ctx.arc(x, y, 3, 0, Math.PI * 2);  // radius 3, bukan 6
           ctx.fillStyle = 'red';
           ctx.fill();
           ctx.lineWidth = 1;
