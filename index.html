@@ -1,94 +1,131 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deteksi Jempol Stabil</title>
-<style>
-  body { margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#000; }
-  canvas, video { position:absolute; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>Naga Tengkorak Sentuh + Kamera</title>
+  <style>
+    html,body {
+      height:100%;
+      margin:0;
+      background:#0b1020;
+      color:#fff;
+      font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      overflow: hidden;
+    }
+    #video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1); /* mirror video */
+      z-index: 0;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width:100%;
+      height:100vh;
+      z-index: 1;
+    }
+  </style>
 </head>
 <body>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="c"></canvas>
 
-<video id="video" autoplay playsinline style="transform: scaleX(-1);"></video>
-<canvas id="output"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-<script>
-const video = document.getElementById('video');
-const canvas = document.getElementById('output');
-const ctx = canvas.getContext('2d');
-
-let smoothX = null, smoothY = null; // untuk smoothing titik
-
-const hands = new Hands({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
-
-hands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7
-});
-
-hands.onResults(onResults);
-
-async function startCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  video.srcObject = stream;
-
-  video.onloadedmetadata = () => {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const camera = new Camera(video, {
-      onFrame: async () => { await hands.send({ image: video }); },
-      width: video.videoWidth,
-      height: video.videoHeight
-    });
-    camera.start();
-  };
-}
-
-function onResults(results) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // gambar video di canvas (mirror)
-  ctx.save();
-  ctx.scale(-1, 1);
-  ctx.drawImage(results.image, -canvas.width, 0, canvas.width, canvas.height);
-  ctx.restore();
-
-  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-    const landmarks = results.multiHandLandmarks[0];
-
-    // jempol ujung: index 4 di Mediapipe
-    const thumbTip = landmarks[4];
-    const x = thumbTip.x * canvas.width;
-    const y = thumbTip.y * canvas.height;
-
-    // smoothing (0.3 = lebih lembut, ganti ke 0.5 untuk responsif tapi agak goyang)
-    if (smoothX === null) {
-      smoothX = x;
-      smoothY = y;
-    } else {
-      smoothX = smoothX + (x - smoothX) * 0.3;
-      smoothY = smoothY + (y - smoothY) * 0.3;
+  <script>
+  (async () => {
+    const video = document.getElementById('video');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      await new Promise(r => video.onloadeddata = r);
+    } catch (err) {
+      console.error("Gagal mengakses kamera:", err);
+      return;
     }
 
-    // gambar titik di posisi jempol
-    ctx.beginPath();
-    ctx.arc(smoothX, smoothY, 10, 0, Math.PI * 2);
-    ctx.fillStyle = "red";
-    ctx.fill();
-  }
-}
+    const model = handPoseDetection.SupportedModels.MediaPipeHands;
+    const detectorConfig = {
+      runtime: 'mediapipe',
+      modelType: 'full',
+      solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands'
+    };
+    const detector = await handPoseDetection.createDetector(model, detectorConfig);
 
-startCamera();
-</script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4], // ibu jari
+      [0,5],[5,6],[6,7],[7,8], // telunjuk
+      [5,9],[9,10],[10,11],[11,12], // jari tengah
+      [9,13],[13,14],[14,15],[15,16], // jari manis
+      [13,17],[17,18],[18,19],[19,20], // kelingking
+      [0,17] // pergelangan ke kelingking
+    ];
+
+    async function detectAndDraw() {
+      const hands = await detector.estimateHands(video, { flipHorizontal: false });
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (hands.length > 0) {
+        const videoW = video.videoWidth;
+        const videoH = video.videoHeight;
+        const scaleX = canvas.width / videoW;
+        const scaleY = canvas.height / videoH;
+
+        const keypoints = hands[0].keypoints;
+
+        // gambar garis
+        ctx.strokeStyle = 'lime';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let [start, end] of HAND_CONNECTIONS) {
+          const kpStart = keypoints[start];
+          const kpEnd = keypoints[end];
+          const x1 = canvas.width - (kpStart.x * scaleX);
+          const y1 = kpStart.y * scaleY;
+          const x2 = canvas.width - (kpEnd.x * scaleX);
+          const y2 = kpEnd.y * scaleY;
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+        }
+        ctx.stroke();
+
+        // gambar titik
+        for (let i = 0; i < keypoints.length; i++) {
+          const kp = keypoints[i];
+          const x = canvas.width - (kp.x * scaleX);
+          const y = kp.y * scaleY;
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = "red";
+          ctx.fill();
+        }
+      }
+
+      requestAnimationFrame(detectAndDraw);
+    }
+
+    detectAndDraw();
+  })();
+  </script>
 </body>
 </html>
