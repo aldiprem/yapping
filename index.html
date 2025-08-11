@@ -1,173 +1,132 @@
 <!doctype html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-  <title>Naga Tengkorak Sentuh + Kamera</title>
-  <style>
-    html,body {
-      height:100%;
-      margin:0;
-      background:#0b1020;
-      color:#fff;
-      font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      -webkit-tap-highlight-color: transparent;
-      overflow: hidden;
-    }
-    #video {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100vh;
-      object-fit: cover;
-      z-index: 0;
-      background: #000;
-      transform: scaleX(-1);
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      display:block;
-      width:100%;
-      height:100vh;
-      touch-action:none;
-      z-index: 1;
-    }
-    .ui {
-      position:fixed;
-      right:12px;
-      top:12px;
-      background:rgba(255,255,255,0.06);
-      padding:8px 10px;
-      border-radius:8px;
-      font-size:13px;
-      backdrop-filter: blur(6px);
-      z-index: 2;
-    }
-    .ui input[type=range] { width:120px; }
-    .hint {
-      position:fixed;
-      left:12px;
-      bottom:12px;
-      background:rgba(0,0,0,0.35);
-      padding:8px 10px;
-      border-radius:8px;
-      font-size:13px;
-      z-index: 2;
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<title>Deteksi Tangan + Garis & Titik</title>
+<style>
+html,body {
+  height:100%;
+  margin:0;
+  background:#0b1020;
+  color:#fff;
+  font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  overflow:hidden;
+}
+#video {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100vh;
+  object-fit: cover;
+  transform: scaleX(-1);
+  z-index: 0;
+}
+canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100vh;
+  z-index: 1;
+}
+</style>
 </head>
 <body>
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="c"></canvas>
+<video id="video" autoplay playsinline muted></video>
+<canvas id="c"></canvas>
 
-  <div class="ui">
-    <div>Panjang: <span id="lenLabel">60</span></div>
-    <input id="len" type="range" min="5" max="200" value="60">
-    <div>Kecepatan: <span id="spdLabel">8</span></div>
-    <input id="spd" type="range" min="1" max="30" value="8">
-  </div>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+<script>
+(async () => {
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 
-  <div class="hint">Sentuh/klik layar untuk menggerakkan naga tengkorak</div>
+  // Ambil akses kamera
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    await new Promise(r => video.onloadeddata = r);
+  } catch (err) {
+    console.error("Kamera gagal:", err);
+    return;
+  }
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-  <script>
-  (async () => {
-    const video = document.getElementById('video');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      video.srcObject = stream;
-      await new Promise(r => video.onloadeddata = r);
-    } catch (err) {
-      console.error("Kamera gagal:", err);
-      return;
-    }
+  // Load detector tangan
+  const handposeDetection = window.handPoseDetection;
+  const model = handposeDetection.SupportedModels.MediaPipeHands;
+  const detector = await handposeDetection.createDetector(model, {
+    runtime: 'mediapipe',
+    modelType: 'full',
+    maxHands: 2,
+    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands'
+  });
 
-    // Load MediaPipe Hands
-    const handposeDetection = window.handPoseDetection;
-    const model = handposeDetection.SupportedModels.MediaPipeHands;
-    const detectorConfig = {
-      runtime: 'mediapipe',
-      modelType: 'full',
-      maxHands: 2,
-      solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands'
-    };
-    const detector = await handposeDetection.createDetector(model, detectorConfig);
-
-    const canvas = document.getElementById('c');
-    const ctx = canvas.getContext('2d', { alpha: true });
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    // Koneksi titik tangan (index sesuai MediaPipe)
-    const connections = [
-    [0, 1], [1, 2], [2, 3], [3, 4], // ibu jari
-    [0, 5], [5, 6], [6, 7], [7, 8], // telunjuk
-    [0, 9], [9, 10], [10, 11], [11, 12], // jari tengah
-    [0, 13], [13, 14], [14, 15], [15, 16], // jari manis
-    [0, 17], [17, 18], [18, 19], [19, 20] // kelingking
+  // Koneksi antar titik tangan
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],      // ibu jari
+    [0,5],[5,6],[6,7],[7,8],      // telunjuk
+    [0,9],[9,10],[10,11],[11,12], // tengah
+    [0,13],[13,14],[14,15],[15,16], // manis
+    [0,17],[17,18],[18,19],[19,20]  // kelingking
   ];
 
-    let lastDetectedText = "";
+  let lastDetectedText = "";
 
-    async function detectHands() {
-      const hands = await detector.estimateHands(video, { flipHorizontal: true });
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  async function detectHands() {
+    const hands = await detector.estimateHands(video, { flipHorizontal: true });
 
-      if (hands.length > 0) {
-        hands.forEach((hand, idx) => {
-          // Gambar garis antar keypoints
-          ctx.strokeStyle = 'lime';
-          ctx.lineWidth = 2;
-          connections.forEach(([a, b]) => {
-            ctx.beginPath();
-            ctx.moveTo(hand.keypoints[a].x, hand.keypoints[a].y);
-            ctx.lineTo(hand.keypoints[b].x, hand.keypoints[b].y);
-            ctx.stroke();
-          });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-          // Gambar titik keypoints
-          hand.keypoints.forEach(p => {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = 'red';
-            ctx.fill();
-          });
+    hands.forEach((hand, idx) => {
+      const pts = hand.keypoints || []; // keypoints punya x,y
+      if (pts.length === 0) return;
 
-          // ======== Placeholder prediksi ========
-          // Ambil koordinat tangan untuk input model
-          const flatPoints = hand.keypoints.map(p => [p.x, p.y]).flat();
-          // Simulasi prediksi (misalnya: kalau telunjuk lebih tinggi dari pergelangan)
-          if (hand.keypoints[8].y < hand.keypoints[0].y) {
-            lastDetectedText = "Isyarat: Jari Telunjuk ke Atas";
-          } else {
-            lastDetectedText = "Isyarat: Tidak dikenali";
-          }
-        });
+      // Gambar garis
+      ctx.strokeStyle = 'lime';
+      ctx.lineWidth = 2;
+      connections.forEach(([a, b]) => {
+        ctx.beginPath();
+        ctx.moveTo(pts[a].x, pts[a].y);
+        ctx.lineTo(pts[b].x, pts[b].y);
+        ctx.stroke();
+      });
+
+      // Gambar titik
+      pts.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = 'red';
+        ctx.fill();
+      });
+
+      // Prediksi sederhana (contoh)
+      if (pts[8].y < pts[0].y) {
+        lastDetectedText = "Isyarat: Jari Telunjuk ke Atas";
       } else {
-        lastDetectedText = "";
+        lastDetectedText = "Isyarat: Tidak dikenali";
       }
+    });
 
-      // Tampilkan teks di bawah layar
-      if (lastDetectedText) {
-        ctx.fillStyle = 'yellow';
-        ctx.font = '28px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(lastDetectedText, canvas.width / 2, canvas.height - 40);
-      }
-
-      requestAnimationFrame(detectHands);
+    // Tampilkan teks di bawah layar
+    if (lastDetectedText) {
+      ctx.fillStyle = 'yellow';
+      ctx.font = '28px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(lastDetectedText, canvas.width / 2, canvas.height - 40);
     }
 
-    detectHands();
-  })();
+    requestAnimationFrame(detectHands);
+  }
+
+  detectHands();
+})();
 </script>
 </body>
 </html>
