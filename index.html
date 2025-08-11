@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-  <title>Deteksi Tangan dengan Garis ke Titik Tengah Pergelangan</title>
+  <title>Deteksi Tangan Akurat + Garis Natural ke Pergelangan</title>
   <style>
     html,body {
       height:100%;
@@ -20,7 +20,7 @@
       width: 100%;
       height: 100vh;
       object-fit: cover;
-      transform: scaleX(-1); /* mirror video supaya seperti cermin */
+      transform: scaleX(-1); /* mirror video */
       z-index: 0;
       background: #000;
     }
@@ -74,13 +74,20 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // Landmark ujung jari (ibu jari, telunjuk, tengah, manis, kelingking)
-    const fingerTips = [4, 8, 12, 16, 20];
+    // Landmark index yang akan dihubungkan langsung ke pergelangan (0)
+    // Ini mencakup ujung jari dan beberapa sendi tiap jari supaya lebih smooth
+    const pointsToConnect = [
+      1,2,3,4,    // ibu jari
+      5,6,7,8,    // telunjuk
+      9,10,11,12, // jari tengah
+      13,14,15,16,// jari manis
+      17,18,19,20 // kelingking
+    ];
 
     async function detectAndDraw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const hands = await detector.estimateHands(video, { flipHorizontal: false });
+      const hands = await detector.estimateHands(video, { flipHorizontal: true });
 
       if (hands.length > 0) {
         const videoW = video.videoWidth;
@@ -91,24 +98,24 @@
         const keypoints = hands[0].keypoints;
 
         // Titik tengah pergelangan tangan (landmark 0)
-        const centerX = canvas.width - (keypoints[0].x * scaleX);
+        const centerX = keypoints[0].x * scaleX;
         const centerY = keypoints[0].y * scaleY;
 
         ctx.strokeStyle = 'lime';
         ctx.lineWidth = 3;
 
         ctx.beginPath();
-        for (const tip of fingerTips) {
-          const tipX = canvas.width - (keypoints[tip].x * scaleX);
-          const tipY = keypoints[tip].y * scaleY;
+        for (const i of pointsToConnect) {
+          const px = keypoints[i].x * scaleX;
+          const py = keypoints[i].y * scaleY;
           ctx.moveTo(centerX, centerY);
-          ctx.lineTo(tipX, tipY);
+          ctx.lineTo(px, py);
         }
         ctx.stroke();
 
         // Gambar titik landmark
         for (const kp of keypoints) {
-          const x = canvas.width - (kp.x * scaleX);
+          const x = kp.x * scaleX;
           const y = kp.y * scaleY;
           ctx.beginPath();
           ctx.arc(x, y, 6, 0, Math.PI * 2);
