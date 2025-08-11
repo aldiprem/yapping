@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-<title>Deteksi Tangan + Garis & Titik</title>
+<title>Deteksi Tangan Akurat</title>
 <style>
 html,body {
   height:100%;
@@ -19,7 +19,7 @@ html,body {
   width: 100%;
   height: 100vh;
   object-fit: cover;
-  transform: scaleX(-1);
+  transform: scaleX(-1); /* mirror biar kayak cermin */
   z-index: 0;
 }
 canvas {
@@ -45,12 +45,18 @@ canvas {
   const video = document.getElementById('video');
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
 
-  // Ambil akses kamera
+  // Sesuaikan ukuran canvas
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // Ambil kamera
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
     video.srcObject = stream;
     await new Promise(r => video.onloadeddata = r);
   } catch (err) {
@@ -58,69 +64,57 @@ canvas {
     return;
   }
 
-  // Load detector tangan
-  const handposeDetection = window.handPoseDetection;
-  const model = handposeDetection.SupportedModels.MediaPipeHands;
-  const detector = await handposeDetection.createDetector(model, {
+  // Load model MediaPipe Hands
+  const model = handPoseDetection.SupportedModels.MediaPipeHands;
+  const detector = await handPoseDetection.createDetector(model, {
     runtime: 'mediapipe',
     modelType: 'full',
     maxHands: 2,
     solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands'
   });
 
-  // Koneksi antar titik tangan
+  // Koneksi antar titik
   const connections = [
-    [0,1],[1,2],[2,3],[3,4],      // ibu jari
-    [0,5],[5,6],[6,7],[7,8],      // telunjuk
-    [0,9],[9,10],[10,11],[11,12], // tengah
-    [0,13],[13,14],[14,15],[15,16], // manis
-    [0,17],[17,18],[18,19],[19,20]  // kelingking
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20]
   ];
-
-  let lastDetectedText = "";
 
   async function detectHands() {
     const hands = await detector.estimateHands(video, { flipHorizontal: true });
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    hands.forEach((hand, idx) => {
-      const pts = hand.keypoints || []; // keypoints punya x,y
-      if (pts.length === 0) return;
+    hands.forEach(hand => {
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
 
       // Gambar garis
       ctx.strokeStyle = 'lime';
       ctx.lineWidth = 2;
       connections.forEach(([a, b]) => {
+        const pa = hand.keypoints[a];
+        const pb = hand.keypoints[b];
         ctx.beginPath();
-        ctx.moveTo(pts[a].x, pts[a].y);
-        ctx.lineTo(pts[b].x, pts[b].y);
+        ctx.moveTo(pa.x / videoWidth * canvas.width, pa.y / videoHeight * canvas.height);
+        ctx.lineTo(pb.x / videoWidth * canvas.width, pb.y / videoHeight * canvas.height);
         ctx.stroke();
       });
 
       // Gambar titik
-      pts.forEach(p => {
+      hand.keypoints.forEach(p => {
+        const px = p.x / videoWidth * canvas.width;
+        const py = p.y / videoHeight * canvas.height;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
         ctx.fillStyle = 'red';
         ctx.fill();
+        ctx.strokeStyle = 'white';
+        ctx.stroke();
       });
-
-      // Prediksi sederhana (contoh)
-      if (pts[8].y < pts[0].y) {
-        lastDetectedText = "Isyarat: Jari Telunjuk ke Atas";
-      } else {
-        lastDetectedText = "Isyarat: Tidak dikenali";
-      }
     });
-
-    // Tampilkan teks di bawah layar
-    if (lastDetectedText) {
-      ctx.fillStyle = 'yellow';
-      ctx.font = '28px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(lastDetectedText, canvas.width / 2, canvas.height - 40);
-    }
 
     requestAnimationFrame(detectHands);
   }
