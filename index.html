@@ -1,39 +1,113 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Roda Spin</title>
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8">
+<title>Roda Spin</title>
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: sans-serif;
+    margin-top: 20px;
+  }
+  #canvas {
+    border-radius: 50%;
+  }
+  .pointer {
+    width: 0; 
+    height: 0; 
+    border-left: 20px solid transparent;
+    border-right: 20px solid transparent;
+    border-bottom: 30px solid red;
+    margin-bottom: -20px;
+    z-index: 10;
+  }
+  button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body>
-  <main class="app">
-    <h1>Roda Spin 🎯</h1>
 
-    <div class="wheel-wrap">
-      <!-- Penunjuk (pointer) -->
-      <div class="pointer"></div>
-      <!-- Kanvas roda -->
-      <canvas id="wheel" aria-label="Roda Spin"></canvas>
-    </div>
+<div class="pointer"></div>
+<canvas id="canvas" width="500" height="500"></canvas>
+<button onclick="spin()">SPIN</button>
 
-    <div class="controls">
-      <button id="spinBtn">SPIN</button>
-      <button id="againBtn" disabled>SPIN LAGI</button>
-    </div>
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const segments = 10;
+const colors = ["#66ccff", "#9999ff", "#999966", "#66ff66", "#ffcc66", "#666699", "#66ff99", "#ff9966", "#ccff99", "#6699ff"];
+let startAngle = 0;
+let spinAngle = 0;
+let spinTime = 0;
+let spinTimeTotal = 0;
 
-    <p id="result" class="result">Hasil akan muncul di sini.</p>
+function drawWheel() {
+  const outsideRadius = 240;
+  const textRadius = 200;
+  const insideRadius = 0;
+  ctx.clearRect(0, 0, 500, 500);
 
-    <details class="editor">
-      <summary>🛠️ Edit Segmen</summary>
-      <p>Isi label segmen dipisah koma. Contoh: <em>Hadiah 1, Hadiah 2, Zonks</em></p>
-      <textarea id="labelsInput" rows="3">Hadiah 1, Hadiah 2, Hadiah 3, Hadiah 4, Hadiah 5, Hadiah 6</textarea>
-      <div class="editor-actions">
-        <button id="applyLabels">Terapkan</button>
-      </div>
-    </details>
-  </main>
+  for(let i = 0; i < segments; i++) {
+    const angle = startAngle + i * (2 * Math.PI / segments);
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.beginPath();
+    ctx.moveTo(250, 250);
+    ctx.arc(250, 250, outsideRadius, angle, angle + (2 * Math.PI / segments), false);
+    ctx.lineTo(250, 250);
+    ctx.fill();
 
-  <script src="app.js"></script>
+    // Nomor
+    ctx.save();
+    ctx.fillStyle = "black";
+    ctx.translate(250 + Math.cos(angle + Math.PI / segments) * textRadius,
+                  250 + Math.sin(angle + Math.PI / segments) * textRadius);
+    ctx.rotate(angle + Math.PI / segments);
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText((i+1).toString(), -10, 5);
+    ctx.restore();
+  }
+}
+
+function spin() {
+  spinAngle = Math.random() * 10 + 10; // kecepatan awal
+  spinTime = 0;
+  spinTimeTotal = Math.random() * 3000 + 4000; // durasi
+  rotateWheel();
+}
+
+function rotateWheel() {
+  spinTime += 30;
+  if(spinTime >= spinTimeTotal) {
+    stopRotateWheel();
+    return;
+  }
+  const spinAngleChange = spinAngle * easeOut(spinTime, 0, spinAngle, spinTimeTotal);
+  startAngle += (spinAngleChange * Math.PI / 180);
+  drawWheel();
+  requestAnimationFrame(rotateWheel);
+}
+
+function stopRotateWheel() {
+  const degrees = startAngle * 180 / Math.PI + 90;
+  const arcd = 360 / segments;
+  const index = Math.floor((360 - (degrees % 360)) / arcd);
+  alert("Hasil: " + (index+1));
+}
+
+function easeOut(t, b, c, d) {
+  const ts = (t/=d)*t;
+  const tc = ts*t;
+  return b+c*(tc + -3*ts + 3*t);
+}
+
+drawWheel();
+</script>
+
 </body>
 </html>
