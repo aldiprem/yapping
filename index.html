@@ -1,117 +1,39 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<title>Chat AI / ChatGPT</title>
-<style>
-body {
-  font-family: Arial, sans-serif;
-  background: #0d1117;
-  color: #fff;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
-#chat {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-}
-.message {
-  max-width: 70%;
-  padding: 10px;
-  margin: 5px 0;
-  border-radius: 8px;
-  line-height: 1.4;
-}
-.user {
-  background: #238636;
-  align-self: flex-end;
-}
-.bot {
-  background: #30363d;
-  align-self: flex-start;
-}
-#inputArea {
-  display: flex;
-  border-top: 1px solid #30363d;
-}
-#input {
-  flex: 1;
-  padding: 20px;
-  font-size: 18px;
-  border: none;
-  background: #161b22;
-  color: #fff;
-  resize: none;
-}
-#send {
-  background: #238636;
-  border: none;
-  padding: 0 20px;
-  font-size: 18px;
-  cursor: pointer;
-  color: #fff;
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Roda Spin</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-<div id="chat"></div>
-<div id="inputArea">
-  <textarea id="input" rows="2" placeholder="Tulis pesan..."></textarea>
-  <button id="send">Kirim</button>
-</div>
+  <main class="app">
+    <h1>Roda Spin 🎯</h1>
 
-<script>
-const chat = document.getElementById('chat');
-const input = document.getElementById('input');
-const sendBtn = document.getElementById('send');
+    <div class="wheel-wrap">
+      <!-- Penunjuk (pointer) -->
+      <div class="pointer"></div>
+      <!-- Kanvas roda -->
+      <canvas id="wheel" aria-label="Roda Spin"></canvas>
+    </div>
 
-function addMessage(text, sender) {
-  const msg = document.createElement('div');
-  msg.className = `message ${sender}`;
-  msg.textContent = text;
-  chat.appendChild(msg);
-  chat.scrollTop = chat.scrollHeight;
-}
+    <div class="controls">
+      <button id="spinBtn">SPIN</button>
+      <button id="againBtn" disabled>SPIN LAGI</button>
+    </div>
 
-async function getBotReply(userText) {
-  const response = await fetch("/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: userText })
-  });
-  if (!response.ok) {
-    throw new Error("Server error: " + response.status);
-  }
-  const data = await response.json();
-  return data.reply;
-}
+    <p id="result" class="result">Hasil akan muncul di sini.</p>
 
-async function sendMessage() {
-  const text = input.value.trim();
-  if (!text) return;
-  addMessage(text, 'user');
-  input.value = '';
-  addMessage("AI sedang mengetik...", 'bot'); // placeholder
-  try {
-    const reply = await getBotReply(text);
-    chat.lastChild.textContent = reply; // replace placeholder
-  } catch (err) {
-    chat.lastChild.textContent = "Error: " + err.message;
-  }
-}
+    <details class="editor">
+      <summary>🛠️ Edit Segmen</summary>
+      <p>Isi label segmen dipisah koma. Contoh: <em>Hadiah 1, Hadiah 2, Zonks</em></p>
+      <textarea id="labelsInput" rows="3">Hadiah 1, Hadiah 2, Hadiah 3, Hadiah 4, Hadiah 5, Hadiah 6</textarea>
+      <div class="editor-actions">
+        <button id="applyLabels">Terapkan</button>
+      </div>
+    </details>
+  </main>
 
-sendBtn.addEventListener('click', sendMessage);
-input.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-</script>
+  <script src="app.js"></script>
 </body>
 </html>
