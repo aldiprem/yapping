@@ -1,113 +1,245 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<title>Roda Spin</title>
-<style>
-  body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-family: sans-serif;
-    margin-top: 20px;
-  }
-  #canvas {
-    border-radius: 50%;
-  }
-  .pointer {
-    width: 0; 
-    height: 0; 
-    border-left: 20px solid transparent;
-    border-right: 20px solid transparent;
-    border-bottom: 30px solid red;
-    margin-bottom: -20px;
-    z-index: 10;
-  }
-  button {
-    margin-top: 20px;
-    padding: 10px 20px;
-    font-size: 16px;
-    cursor: pointer;
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>Ular Ulat Sentuh + Kamera</title>
+  <style>
+    html,body {
+      height:100%;
+      margin:0;
+      background:#0b1020;
+      color:#fff;
+      font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+    #video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 50vh;
+      object-fit: cover;
+      z-index: 0;
+      background: #000;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display:block;
+      width:100%;
+      height:100vh;
+      touch-action:none;
+      z-index: 1;
+    }
+    .ui {
+      position:fixed;
+      right:12px;
+      top:12px;
+      background:rgba(255,255,255,0.06);
+      padding:8px 10px;
+      border-radius:8px;
+      font-size:13px;
+      backdrop-filter: blur(6px);
+      z-index: 2;
+    }
+    .ui input[type=range] { width:120px; }
+    .hint {
+      position:fixed;
+      left:12px;
+      bottom:12px;
+      background:rgba(0,0,0,0.35);
+      padding:8px 10px;
+      border-radius:8px;
+      font-size:13px;
+      z-index: 2;
+    }
+  </style>
 </head>
 <body>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="c"></canvas>
 
-<div class="pointer"></div>
-<canvas id="canvas" width="500" height="500"></canvas>
-<button onclick="spin()">SPIN</button>
+  <div class="ui">
+    <div>Panjang: <span id="lenLabel">60</span></div>
+    <input id="len" type="range" min="5" max="200" value="60">
+    <div>Kecepatan: <span id="spdLabel">8</span></div>
+    <input id="spd" type="range" min="1" max="30" value="8">
+  </div>
+
+  <div class="hint">Sentuh/klik layar untuk menggerakkan ular ulat</div>
 
 <script>
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const segments = 10;
-const colors = ["#66ccff", "#9999ff", "#999966", "#66ff66", "#ffcc66", "#666699", "#66ff99", "#ff9966", "#ccff99", "#6699ff"];
-let startAngle = 0;
-let spinAngle = 0;
-let spinTime = 0;
-let spinTimeTotal = 0;
-
-function drawWheel() {
-  const outsideRadius = 240;
-  const textRadius = 200;
-  const insideRadius = 0;
-  ctx.clearRect(0, 0, 500, 500);
-
-  for(let i = 0; i < segments; i++) {
-    const angle = startAngle + i * (2 * Math.PI / segments);
-    ctx.fillStyle = colors[i % colors.length];
-    ctx.beginPath();
-    ctx.moveTo(250, 250);
-    ctx.arc(250, 250, outsideRadius, angle, angle + (2 * Math.PI / segments), false);
-    ctx.lineTo(250, 250);
-    ctx.fill();
-
-    // Nomor
-    ctx.save();
-    ctx.fillStyle = "black";
-    ctx.translate(250 + Math.cos(angle + Math.PI / segments) * textRadius,
-                  250 + Math.sin(angle + Math.PI / segments) * textRadius);
-    ctx.rotate(angle + Math.PI / segments);
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText((i+1).toString(), -10, 5);
-    ctx.restore();
+(async () => {
+  // --- Kamera ---
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    document.getElementById('video').srcObject = stream;
+  } catch (err) {
+    console.error("Gagal mengakses kamera:", err);
   }
-}
 
-function spin() {
-  spinAngle = Math.random() * 10 + 10; // kecepatan awal
-  spinTime = 0;
-  spinTimeTotal = Math.random() * 3000 + 4000; // durasi
-  rotateWheel();
-}
+  // --- Ular Ulat ---
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: true });
 
-function rotateWheel() {
-  spinTime += 30;
-  if(spinTime >= spinTimeTotal) {
-    stopRotateWheel();
-    return;
+  let DPR = window.devicePixelRatio || 1;
+  function resize(){
+    DPR = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(innerWidth * DPR);
+    canvas.height = Math.floor(innerHeight * DPR);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
   }
-  const spinAngleChange = spinAngle * easeOut(spinTime, 0, spinAngle, spinTimeTotal);
-  startAngle += (spinAngleChange * Math.PI / 180);
-  drawWheel();
-  requestAnimationFrame(rotateWheel);
-}
+  addEventListener('resize', resize, { passive: true });
+  resize();
 
-function stopRotateWheel() {
-  const degrees = startAngle * 180 / Math.PI + 90;
-  const arcd = 360 / segments;
-  const index = Math.floor((360 - (degrees % 360)) / arcd);
-  alert("Hasil: " + (index+1));
-}
+  const lenInput = document.getElementById('len');
+  const spdInput = document.getElementById('spd');
+  const lenLabel = document.getElementById('lenLabel');
+  const spdLabel = document.getElementById('spdLabel');
 
-function easeOut(t, b, c, d) {
-  const ts = (t/=d)*t;
-  const tc = ts*t;
-  return b+c*(tc + -3*ts + 3*t);
-}
+  let segmentCount = parseInt(lenInput.value,10);
+  let speed = parseFloat(spdInput.value);
 
-drawWheel();
+  lenInput.addEventListener('input', ()=>{ segmentCount = parseInt(lenInput.value,10); lenLabel.textContent = segmentCount; resetSnake(); });
+  spdInput.addEventListener('input', ()=>{ speed = parseFloat(spdInput.value); spdLabel.textContent = speed; });
+
+  const pointer = { x: innerWidth/2, y: innerHeight/2, active: false };
+
+  let segments = [];
+  function resetSnake(){
+    segments = [];
+    const startX = innerWidth/2;
+    const startY = innerHeight/2;
+    for(let i=0;i<segmentCount;i++){
+      segments.push({ x: startX - i*6, y: startY, vx:0, vy:0 });
+    }
+  }
+  resetSnake();
+
+  function setPointerFromEvent(e){
+    e.preventDefault && e.preventDefault();
+    let clientX, clientY;
+    if(e.touches && e.touches.length){
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if(e.changedTouches && e.changedTouches.length){
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    pointer.x = clientX;
+    pointer.y = clientY;
+    pointer.active = true;
+  }
+
+  canvas.addEventListener('mousedown', setPointerFromEvent, { passive: false });
+  canvas.addEventListener('mousemove', (e) => { if(e.buttons) setPointerFromEvent(e); }, { passive: false });
+  window.addEventListener('mouseup', ()=>{ pointer.active = false; }, { passive: true });
+
+  canvas.addEventListener('touchstart', setPointerFromEvent, { passive: false });
+  canvas.addEventListener('touchmove', setPointerFromEvent, { passive: false });
+  canvas.addEventListener('touchend', ()=>{ pointer.active = false; }, { passive: true });
+  canvas.addEventListener('touchcancel', ()=>{ pointer.active = false; }, { passive: true });
+
+  function lerp(a,b,t){ return a + (b-a)*t; }
+
+  let lastTime = performance.now();
+  let footPhase = 0; // animasi kaki
+
+  function frame(now){
+    const dt = Math.min(40, now - lastTime) / 16.6667;
+    lastTime = now;
+    footPhase += dt * 0.3; // gerakan kaki
+
+    ctx.clearRect(0,0,innerWidth,innerHeight);
+
+    if(pointer.active){
+      const head = segments[0];
+      const dx = pointer.x - head.x;
+      const dy = pointer.y - head.y;
+      const distance = Math.hypot(dx,dy) || 1;
+      const maxStep = speed * dt;
+      const step = Math.min(maxStep, distance);
+      head.x += dx/distance * step;
+      head.y += dy/distance * step;
+    } else {
+      const head = segments[0];
+      head.x = lerp(head.x, innerWidth/2, 0.01*dt);
+      head.y = lerp(head.y, innerHeight/2, 0.01*dt);
+    }
+
+    const followDist = 8;
+    for(let i=1;i<segmentCount;i++){
+      if(!segments[i]) segments[i] = { x: segments[i-1].x, y: segments[i-1].y, vx:0, vy:0 };
+      const prev = segments[i-1];
+      const cur = segments[i];
+      const dx = prev.x - cur.x;
+      const dy = prev.y - cur.y;
+      const d = Math.hypot(dx,dy) || 1;
+      const targetX = prev.x - (dx / d) * followDist;
+      const targetY = prev.y - (dy / d) * followDist;
+      cur.x = lerp(cur.x, targetX, 0.4 * dt);
+      cur.y = lerp(cur.y, targetY, 0.4 * dt);
+    }
+
+    if(segments.length > segmentCount) segments.length = segmentCount;
+    while(segments.length < segmentCount){
+      const last = segments[segments.length-1] || { x:innerWidth/2, y:innerHeight/2 };
+      segments.push({ x:last.x, y:last.y, vx:0, vy:0 });
+    }
+
+    // Gambar kaki-kaki
+    ctx.lineWidth = 2;
+    for(let i = 0; i < segments.length; i++){
+      const p = segments[i];
+      const t = i / segments.length;
+      const size = lerp(14, 4, t);
+      const angle = Math.sin(footPhase * 10 + i * 0.5) * 0.4; // goyang kiri kanan
+      const legLen = size * 1.2;
+      ctx.strokeStyle = 'hsl(160 60% 60%)';
+      ctx.beginPath();
+      ctx.moveTo(p.x + Math.cos(angle + Math.PI/2) * size, p.y + Math.sin(angle + Math.PI/2) * size);
+      ctx.lineTo(p.x + Math.cos(angle + Math.PI/2) * (size + legLen), p.y + Math.sin(angle + Math.PI/2) * (size + legLen));
+      ctx.moveTo(p.x + Math.cos(angle - Math.PI/2) * size, p.y + Math.sin(angle - Math.PI/2) * size);
+      ctx.lineTo(p.x + Math.cos(angle - Math.PI/2) * (size + legLen), p.y + Math.sin(angle - Math.PI/2) * (size + legLen));
+      ctx.stroke();
+    }
+
+    // Gambar badan ular
+    for(let i = segments.length-1; i >= 0; i--){
+      const p = segments[i];
+      const t = i / Math.max(1, segments.length-1);
+      const size = lerp(14, 4, t);
+      const hue = lerp(140, 200, t);
+      const light = lerp(60, 35, t);
+      ctx.beginPath();
+      ctx.fillStyle = `hsl(${hue} 60% ${light}%)`;
+      ctx.arc(p.x, p.y, size, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // Gambar lingkaran sentuhan
+    if(pointer.active){
+      const pulse = 5 * Math.sin(now/200) + 20;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.arc(pointer.x, pointer.y, pulse, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+})();
 </script>
-
 </body>
 </html>
